@@ -1,20 +1,32 @@
 import { Component, OnInit } from '@angular/core';
-import { HttpClient } from '@angular/common/http';
+import { PaymentService, OrderRequest, PaymentRequest } from './payment.service';
 
 @Component({
   selector: 'app-root',
   templateUrl: './app.component.html',
-  standalone : true,
+  standalone: true,
   styleUrls: ['./app.component.css']
 })
 export class AppComponent implements OnInit {
   private appId = 'YOUR_APPLICATION_ID';
-  private locationId = 'YOUR_LOCATION_ID';
+  private locationId: string | null = null;
 
-  constructor(private http: HttpClient) {}
+  constructor(private paymentService: PaymentService) {}
 
   ngOnInit() {
     this.loadSquare();
+    this.fetchLocationId();
+  }
+
+  fetchLocationId() {
+    this.paymentService.getLocationId().subscribe({
+      next: (id) => {
+        this.locationId = id;
+      },
+      error: (err) => {
+        console.error('Failed to fetch location ID', err);
+      }
+    });
   }
 
   async loadSquare() {
@@ -48,7 +60,7 @@ export class AppComponent implements OnInit {
       await this.handlePaymentMethodSubmission(event, payments);
     });
 
-    let card: any; // Replace 'any' with the actual type of card from Square.js
+    let card: any;
 
     try {
       card = await this.initializeCard(payments);
@@ -58,13 +70,6 @@ export class AppComponent implements OnInit {
     }
 
     cardButton.disabled = false;
-
-    const token = await this.tokenize(card);
-    const verificationToken = await this.verifyBuyer(payments, token);
-    const paymentResults = await this.createPayment(token, verificationToken);
-
-    this.displayPaymentResults('SUCCESS');
-    console.debug('Payment Success', paymentResults);
   }
 
   async initializeCard(payments: any) {
@@ -84,13 +89,28 @@ export class AppComponent implements OnInit {
 
     cardButton.disabled = true;
 
-    let card: any; // Replace 'any' with the actual type of card from Square.js
+    let card: any;
 
     try {
       card = await this.initializeCard(payments);
       const token = await this.tokenize(card);
       const verificationToken = await this.verifyBuyer(payments, token);
-      const paymentResults = await this.createPayment(token, verificationToken);
+
+      // Create order before processing payment
+      const orderRequest: OrderRequest = {
+        items: [
+          { name: 'Item 1', quantity: '1', price: 1000 }
+        ]
+      };
+      const orderResponse = await this.paymentService.createOrder(orderRequest).toPromise();
+
+      const paymentRequest: PaymentRequest = {
+        amount: 1000,
+        nonce: token,
+        orderId: orderResponse.id
+      };
+
+      const paymentResults = await this.paymentService.processPayment(paymentRequest).toPromise();
 
       this.displayPaymentResults('SUCCESS');
       console.debug('Payment Success', paymentResults);
@@ -117,7 +137,7 @@ export class AppComponent implements OnInit {
 
   async verifyBuyer(payments: any, token: any) {
     const verificationDetails = {
-      amount: '1.00',
+      amount: '10.00',
       billingContact: {
         givenName: 'John',
         familyName: 'Doe',
@@ -128,22 +148,12 @@ export class AppComponent implements OnInit {
         state: 'LND',
         countryCode: 'GB',
       },
-      currencyCode: 'GBP',
+      currencyCode: 'USD',
       intent: 'CHARGE',
     };
 
     const verificationResults = await payments.verifyBuyer(token, verificationDetails);
     return verificationResults.token;
-  }
-
-  async createPayment(token: any, verificationToken: any) {
-    const body = {
-      locationId: this.locationId,
-      sourceId: token,
-      verificationToken: verificationToken,
-    };
-
-    return this.http.post('/api/payment', body).toPromise();
   }
 
   displayPaymentResults(status: string) {
