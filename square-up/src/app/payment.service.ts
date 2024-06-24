@@ -3,7 +3,7 @@ import { HttpClient } from '@angular/common/http';
 import { Observable } from 'rxjs';
 
 @Injectable({
-  providedIn: 'root'
+  providedIn: 'root',
 })
 export class PaymentService {
   private apiUrl = 'http://localhost:8080/api';
@@ -24,11 +24,19 @@ export class PaymentService {
 }
 
 export interface OrderRequest {
-  items: { name: string; quantity: string; price: number }[];
+  locationId: string;
+  amount: number;
+  currency: string;
+  lineItems: OrderLineItemRequest[];
+}
+
+export interface OrderLineItemRequest {
+  name: string;
+  quantity: number;
+  price: number;
 }
 
 export interface PaymentRequest {
-  amount: number;
   nonce: string;
   orderId: string;
 }

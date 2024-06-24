@@ -1,15 +1,21 @@
 import { Component, OnInit } from '@angular/core';
-import { PaymentService, OrderRequest, PaymentRequest } from './payment.service';
+import {
+  PaymentService,
+  OrderRequest,
+  PaymentRequest,
+} from './payment.service';
 
 @Component({
   selector: 'app-root',
   templateUrl: './app.component.html',
+  styleUrls: ['./app.component.css'],
   standalone: true,
-  styleUrls: ['./app.component.css']
 })
 export class AppComponent implements OnInit {
-  private appId = 'YOUR_APPLICATION_ID';
+  private appId = 'sandbox-sq0idb-TEAiLY52bxRBdOZqkr4zcA';
   private locationId: string | null = null;
+  private payments: any; // To store the payments instance
+  private card: any; // To store the initialized card instance
 
   constructor(private paymentService: PaymentService) {}
 
@@ -20,12 +26,12 @@ export class AppComponent implements OnInit {
 
   fetchLocationId() {
     this.paymentService.getLocationId().subscribe({
-      next: (id) => {
-        this.locationId = id;
+      next: (response: any) => {
+        this.locationId = response.locationId; // Assuming response is { "locationId": "L2SANBZ4MQDYV" }
       },
       error: (err) => {
         console.error('Failed to fetch location ID', err);
-      }
+      },
     });
   }
 
@@ -34,54 +40,29 @@ export class AppComponent implements OnInit {
       throw new Error('Square.js failed to load properly');
     }
 
-    const statusContainer = document.getElementById('payment-status-container');
-    if (!statusContainer) {
-      throw new Error('Payment status container not found');
-    }
-
-    statusContainer.className = 'missing-credentials';
-    statusContainer.style.visibility = 'visible';
-
-    let payments;
     try {
-      payments = window.Square.payments(this.appId, this.locationId);
+      this.payments = window.Square.payments(this.appId, this.locationId);
+      await this.initializeCard();
     } catch (e) {
       console.error('Square payments initialization failed', e);
-      return;
     }
+  }
 
-    let cardButton = document.getElementById('card-button') as HTMLButtonElement | null;
-    if (!cardButton) {
-      console.error('Card button not found');
-      return;
-    }
-
-    cardButton.addEventListener('click', async (event) => {
-      await this.handlePaymentMethodSubmission(event, payments);
-    });
-
-    let card: any;
-
+  async initializeCard() {
     try {
-      card = await this.initializeCard(payments);
+      this.card = await this.payments.card();
+      await this.card.attach('#card-container');
     } catch (e) {
       console.error('Initializing Card failed', e);
-      return;
     }
-
-    cardButton.disabled = false;
   }
 
-  async initializeCard(payments: any) {
-    const card = await payments.card();
-    await card.attach('#card-container');
-    return card;
-  }
-
-  async handlePaymentMethodSubmission(event: Event, payments: any) {
+  async handlePaymentMethodSubmission(event: Event) {
     event.preventDefault();
 
-    const cardButton = document.getElementById('card-button') as HTMLButtonElement | null;
+    const cardButton = document.getElementById(
+      'card-button'
+    ) as HTMLButtonElement | null;
     if (!cardButton) {
       console.error('Card button not found');
       return;
@@ -89,28 +70,38 @@ export class AppComponent implements OnInit {
 
     cardButton.disabled = true;
 
-    let card: any;
-
     try {
-      card = await this.initializeCard(payments);
-      const token = await this.tokenize(card);
-      const verificationToken = await this.verifyBuyer(payments, token);
+      if (!this.card) {
+        throw new Error('Card not initialized');
+      }
+
+      const token = await this.tokenize(this.card);
 
       // Create order before processing payment
       const orderRequest: OrderRequest = {
-        items: [
-          { name: 'Item 1', quantity: '1', price: 1000 }
-        ]
+        locationId: 'L2SANBZ4MQDYV',
+        amount: 1000, // Total amount in cents ($10.00)
+        currency: 'USD',
+        lineItems: [
+          {
+            name: 'Item 1',
+            quantity: 1,
+            price: 1000, // Price of the item in cents ($10.00)
+          },
+        ],
       };
-      const orderResponse = await this.paymentService.createOrder(orderRequest).toPromise();
+      const orderResponse = await this.paymentService
+        .createOrder(orderRequest)
+        .toPromise();
 
       const paymentRequest: PaymentRequest = {
-        amount: 1000,
         nonce: token,
-        orderId: orderResponse.id
+        orderId: 'hccgHITRASefqsyNPq1lvJNEuQFZY',
       };
 
-      const paymentResults = await this.paymentService.processPayment(paymentRequest).toPromise();
+      const paymentResults = await this.paymentService
+        .processPayment(paymentRequest)
+        .toPromise();
 
       this.displayPaymentResults('SUCCESS');
       console.debug('Payment Success', paymentResults);
@@ -133,27 +124,6 @@ export class AppComponent implements OnInit {
       }
       throw new Error(errorMessage);
     }
-  }
-
-  async verifyBuyer(payments: any, token: any) {
-    const verificationDetails = {
-      amount: '10.00',
-      billingContact: {
-        givenName: 'John',
-        familyName: 'Doe',
-        email: 'john.doe@square.example',
-        phone: '3214563987',
-        addressLines: ['123 Main Street', 'Apartment 1'],
-        city: 'London',
-        state: 'LND',
-        countryCode: 'GB',
-      },
-      currencyCode: 'USD',
-      intent: 'CHARGE',
-    };
-
-    const verificationResults = await payments.verifyBuyer(token, verificationDetails);
-    return verificationResults.token;
   }
 
   displayPaymentResults(status: string) {
