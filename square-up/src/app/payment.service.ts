@@ -6,7 +6,8 @@ import { Observable } from 'rxjs';
   providedIn: 'root',
 })
 export class PaymentService {
-  private apiUrl = 'http://localhost:8080/api';
+  private apiUrl =
+    'https://reimagined-fishstick-4pxjw5wpjqphj549-4200.app.github.dev/api';
 
   constructor(private http: HttpClient) {}
 

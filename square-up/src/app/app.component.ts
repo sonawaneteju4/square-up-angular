@@ -114,6 +114,7 @@ export class AppComponent implements OnInit {
   }
 
   async tokenize(paymentMethod: any) {
+    console.log(paymentMethod);
     const tokenResult = await paymentMethod.tokenize();
     if (tokenResult.status === 'OK') {
       return tokenResult.token;
